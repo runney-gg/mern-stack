@@ -12,6 +12,10 @@ const transactionSchema = new mongoose.Schema(
       required: [true, 'Amount is required.'],
       min: [0.01, 'Amount must be greater than zero.'],
       max: [1_000_000_000, 'Amount cannot exceed 1,000,000,000.'],
+      validate: {
+        validator: (value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8,
+        message: 'Amount must have no more than two decimal places.',
+      },
     },
     category: {
       type: String,

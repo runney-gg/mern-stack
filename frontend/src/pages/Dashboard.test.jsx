@@ -164,3 +164,14 @@ it('sends search and filters to the API and presents filtered-load errors', asyn
   await screen.findByText('Filtered transactions could not be loaded.', {}, { timeout: 2500 });
   expect(screen.getByText('Could not load transactions. Use the error notice above to retry.')).toBeTruthy();
 });
+
+it('clears the API error notice after retry succeeds', async () => {
+  getHealth.mockRejectedValueOnce(new Error('Cannot reach the SpendWise API.'));
+  render(<Dashboard />);
+
+  await screen.findByText('Cannot reach the SpendWise API.');
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+  await waitFor(() => expect(screen.queryByText('Cannot reach the SpendWise API.')).toBeNull());
+  expect(getHealth).toHaveBeenCalledTimes(2);
+});

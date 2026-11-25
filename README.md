@@ -58,7 +58,17 @@ The API accepts JSON request bodies up to 16 KB. Transaction amounts must be fro
 
 ## Data flow and tests
 
-The transaction form calls a frontend API helper, which sends a request to an Express route. The route calls a controller, the controller validates input and uses the Mongoose `Transaction` model, and Mongoose reads or writes the MongoDB database. The dashboard uses the same API helpers to load transactions, summaries, and health status.
+### Transaction request flow
+
+When a user submits the add/edit form in `frontend/src/components/TransactionForm.jsx`, the component checks the required amount, category, and date, builds a JSON transaction, and calls `createTransaction()` or `updateTransaction()` from `frontend/src/api/transactions.js`. That helper sends `POST /api/transactions` or `PUT /api/transactions/:id`; it uses the same-origin `/api` path by default, which the Vite proxy forwards to the backend at `http://127.0.0.1:5001`.
+
+In `backend/src/app.js`, Express mounts the transaction router at `/api/transactions`. `backend/src/routes/transactionRoutes.js` checks database availability and maps the HTTP method/path to a controller in `backend/src/controllers/transactionController.js`. The controller parses and validates the submitted fields with `parseTransactionInput()`, then creates or updates a document with the Mongoose `Transaction` model in `backend/src/models/Transaction.js`. Mongoose persists the document to the database selected by `MONGODB_URI`.
+
+The create controller responds with HTTP 201 and the created transaction as JSON; update responds with HTTP 200 and the updated transaction. The frontend helper parses successful JSON and throws a readable error for network, invalid JSON, or non-2xx responses. On success, `TransactionForm.jsx` calls `onSaved()`. The dashboard in `frontend/src/pages/Dashboard.jsx` closes the dialog and increments its refresh key, which reloads the recent transaction list and summary API data so the list, totals, and charts reflect the mutation. Delete uses `deleteTransaction()` in the same API helper; after deletion, the dashboard refreshes its data as well.
+
+MongoDB connection is configured in `backend/.env` and initialized by `backend/src/server.js` through `backend/src/config/db.js`. The server binds to `127.0.0.1:5001`; if MongoDB is down, the API starts in degraded mode and retries the connection.
+
+The short version is: **React form → API helper → Express route → controller/validation → Mongoose model → MongoDB → JSON response → dashboard refresh.**
 
 Run backend tests from the project root with `npm test` (or from `backend/` with `npm test`). The suite includes validation/filter unit tests and HTTP API tests for transaction CRUD, filters, summaries, and database-unavailable responses. The HTTP tests need the local MongoDB configured in `backend/.env`; they use the separate `spendwise_test` database and clear its transaction records before and after the suite. The test setup refuses to run against a remote MongoDB host or if the configured application database is named `spendwise_test`. If MongoDB is not reachable, the integration tests fail with an explicit setup message rather than being skipped. Your normal `spendwise` database is not used by these tests.
 

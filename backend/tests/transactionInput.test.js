@@ -47,14 +47,17 @@ test('supports partial updates and clearing an optional description', () => {
 });
 
 test('validates model fields and defines timestamps', () => {
-  const invalid = new Transaction({ type: 'transfer', amount: -1, category: '', date: 'invalid' });
+  const invalid = new Transaction({ type: 'transfer', amount: 1.239, category: '', date: 'invalid' });
   const error = invalid.validateSync();
 
   assert.ok(error);
   assert.ok(error.errors.type);
-  assert.ok(error.errors.amount);
+  assert.match(error.errors.amount.message, /two decimal places/);
   assert.ok(error.errors.category);
   assert.ok(error.errors.date);
+
+  const belowMinimum = new Transaction({ type: 'expense', amount: -1, category: 'Food', date: new Date() });
+  assert.ok(belowMinimum.validateSync().errors.amount);
 
   const valid = new Transaction({ type: 'income', amount: 100, category: 'Salary', date: new Date() });
   assert.equal(valid.validateSync(), undefined);

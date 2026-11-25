@@ -108,8 +108,11 @@ describe('transaction HTTP API', () => {
       body: JSON.stringify(createPayload({ category: ' Transport ' })),
     });
     assert.equal(created.response.status, 201);
+    assert.equal(typeof created.body._id, 'string');
     assert.equal(created.body.category, 'Transport');
     assert.equal(created.body.type, 'expense');
+    assert.equal(created.body.amount, 125.5);
+    assert.equal(typeof created.body.date, 'string');
 
     const income = await request('/transactions', {
       method: 'POST',
@@ -124,6 +127,7 @@ describe('transaction HTTP API', () => {
 
     const filtered = await request('/transactions?month=2026-11&type=expense&search=bus');
     assert.equal(filtered.response.status, 200);
+    assert.ok(Array.isArray(filtered.body));
     assert.equal(filtered.body.length, 1);
     assert.equal(filtered.body[0]._id, created.body._id);
 
@@ -210,6 +214,7 @@ describe('transaction HTTP API', () => {
       body: JSON.stringify({ amount: 200, description: 'Updated fare' }),
     });
     assert.equal(updated.response.status, 200);
+    assert.equal(typeof updated.body._id, 'string');
     assert.equal(updated.body.amount, 200);
     assert.equal(updated.body.description, 'Updated fare');
 
@@ -236,7 +241,7 @@ describe('transaction HTTP API', () => {
 
     const deleted = await request(`/transactions/${created.body._id}`, { method: 'DELETE' });
     assert.equal(deleted.response.status, 200);
-    assert.equal(deleted.body.message, 'Transaction deleted.');
+    assert.deepEqual(deleted.body, { message: 'Transaction deleted.' });
 
     const missing = await request(`/transactions/${created.body._id}`, { method: 'DELETE' });
     assert.equal(missing.response.status, 404);
