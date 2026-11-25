@@ -1,0 +1,193 @@
+{
+  "info": {
+    "_postman_id": "9c60a49d-9dd3-4af7-8d0a-3d23604a60be",
+    "name": "SpendWise API QA",
+    "description": "CRUD, filtering, summary, and validation checks for SpendWise. Before running, point the API at an isolated test database such as spendwise_test; do not run against your normal SpendWise database. Run the requests in order with MongoDB connected. The first request creates a unique runTag; the last requests delete only the income and expense created by this collection. Database-unavailable behavior is covered by the backend tests; it can also be checked separately by pointing baseUrl at an API started with an unavailable MongoDB URI.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:5001" },
+    { "key": "runTag", "value": "" },
+    { "key": "testDate", "value": "" },
+    { "key": "testMonth", "value": "" },
+    { "key": "incomeId", "value": "" },
+    { "key": "expenseId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const now = new Date();",
+              "const date = now.toISOString().slice(0, 10);",
+              "pm.collectionVariables.set('runTag', `SWQA_${Date.now()}`);",
+              "pm.collectionVariables.set('testDate', date);",
+              "pm.collectionVariables.set('testMonth', date.slice(0, 7));",
+              "pm.collectionVariables.unset('incomeId');",
+              "pm.collectionVariables.unset('expenseId');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('health responds with API and database status', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('ok');",
+              "  pm.expect(['connected', 'disconnected']).to.include(body.database);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/health" }
+    },
+    {
+      "name": "Create Income (NPR 30,000)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('income is created with 201 and timestamps', () => {",
+            "  pm.response.to.have.status(201);",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.type).to.eql('income');",
+            "  pm.expect(body.amount).to.eql(30000);",
+            "  pm.expect(body.createdAt).to.be.a('string');",
+            "  pm.expect(body.updatedAt).to.be.a('string');",
+            "  pm.collectionVariables.set('incomeId', body._id);",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"type\": \"income\",\n  \"amount\": 30000,\n  \"category\": \"Salary\",\n  \"description\": \"{{runTag}} income\",\n  \"date\": \"{{testDate}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/transactions"
+      }
+    },
+    {
+      "name": "Create Expense (NPR 5,000)",
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('expense is created with 201', () => {",
+            "  pm.response.to.have.status(201);",
+            "  const body = pm.response.json();",
+            "  pm.expect(body.type).to.eql('expense');",
+            "  pm.expect(body.amount).to.eql(5000);",
+            "  pm.collectionVariables.set('expenseId', body._id);",
+            "});"
+          ]
+        }
+      }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"type\": \"expense\",\n  \"amount\": 5000,\n  \"category\": \"Food\",\n  \"description\": \"{{runTag}} expense\",\n  \"date\": \"{{testDate}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/transactions"
+      }
+    },
+    {
+      "name": "List Transactions",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('list returns a JSON array', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array'); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/transactions" }
+    },
+    {
+      "name": "Filter by Month, Type, and Search",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('combined filters return the expense only', () => { pm.response.to.have.status(200); const rows = pm.response.json(); pm.expect(rows).to.have.length(1); pm.expect(rows[0]._id).to.eql(pm.collectionVariables.get('expenseId')); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/transactions?month={{testMonth}}&type=expense&search={{runTag}}" }
+    },
+    {
+      "name": "Filter by Inclusive Date Range and Search",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('inclusive range returns both test transactions', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.have.length(2); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/transactions?startDate={{testDate}}&endDate={{testDate}}&search={{runTag}}" }
+    },
+    {
+      "name": "Summary Before Edit",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test('summary totals, balance, category, and monthly chart are database-backed', () => {",
+        "  pm.response.to.have.status(200);",
+        "  const body = pm.response.json();",
+        "  pm.expect(body.totalIncome).to.eql(30000);",
+        "  pm.expect(body.totalExpenses).to.eql(5000);",
+        "  pm.expect(body.balance).to.eql(25000);",
+        "  pm.expect(body.expensesByCategory).to.deep.include({ category: 'Food', total: 5000 });",
+        "  pm.expect(body.monthlyData).to.deep.include({ month: pm.collectionVariables.get('testMonth'), income: 30000, expenses: 5000 });",
+        "});"
+      ] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/summary?month={{testMonth}}&search={{runTag}}" }
+    },
+    {
+      "name": "Update Expense to NPR 4,000",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('expense update returns the edited transaction', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.amount).to.eql(4000); pm.expect(body._id).to.eql(pm.collectionVariables.get('expenseId')); });"] } }],
+      "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 4000,\n  \"description\": \"{{runTag}} expense edited\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/transactions/{{expenseId}}" }
+    },
+    {
+      "name": "Summary After Edit",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('summary reflects the edited expense', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.totalExpenses).to.eql(4000); pm.expect(body.balance).to.eql(26000); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/summary?month={{testMonth}}&search={{runTag}}" }
+    },
+    {
+      "name": "Reject Invalid Amount",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('negative amount is rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().message).to.be.a('string'); });"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"type\": \"expense\",\n  \"amount\": -1,\n  \"category\": \"Food\",\n  \"date\": \"{{testDate}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/transactions" }
+    },
+    {
+      "name": "Reject Missing Required Fields",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('missing required fields are rejected', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().message).to.be.a('string'); });"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"type\": \"income\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/transactions" }
+    },
+    {
+      "name": "Reject Impossible Calendar Date",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('impossible calendar date is rejected', () => { pm.response.to.have.status(400); });"] } }],
+      "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"type\": \"income\",\n  \"amount\": 1,\n  \"category\": \"Test\",\n  \"date\": \"2026-02-30\"\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/transactions" }
+    },
+    {
+      "name": "Update Nonexistent Transaction",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('valid but absent ID returns 404', () => { pm.response.to.have.status(404); });"] } }],
+      "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"amount\": 1\n}", "options": { "raw": { "language": "json" } } }, "url": "{{baseUrl}}/api/transactions/000000000000000000000000" }
+    },
+    {
+      "name": "Delete Nonexistent Transaction",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('valid but absent ID returns 404', () => { pm.response.to.have.status(404); });"] } }],
+      "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/transactions/000000000000000000000000" }
+    },
+    {
+      "name": "Reject Malformed Transaction ID",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('malformed ID returns 400', () => { pm.response.to.have.status(400); });"] } }],
+      "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/transactions/not-an-id" }
+    },
+    {
+      "name": "Delete Expense",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('expense delete succeeds', () => { pm.response.to.have.status(200); });"] } }],
+      "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/transactions/{{expenseId}}" }
+    },
+    {
+      "name": "Summary After Expense Delete",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('balance updates after delete', () => { pm.response.to.have.status(200); const body = pm.response.json(); pm.expect(body.totalIncome).to.eql(30000); pm.expect(body.totalExpenses).to.eql(0); pm.expect(body.balance).to.eql(30000); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/summary?month={{testMonth}}&search={{runTag}}" }
+    },
+    {
+      "name": "Cleanup Income Test Record",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('income test record cleanup succeeds', () => { pm.response.to.have.status(200); });"] } }],
+      "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/transactions/{{incomeId}}" }
+    },
+    {
+      "name": "Confirm Test Records Removed",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('run-tagged test records are removed', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array').that.is.empty; });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/transactions?search={{runTag}}" }
+    }
+  ]
+}
